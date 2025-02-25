@@ -1,86 +1,92 @@
-from collections import deque
+import heapq
 
-ROOM_SIZE = 10
-BANANA_POSITION = 8
-MONKEY1_START = 0
-MONKEY2_START = 1
+class MonkeyBanana:
+    def __init__(self, grid_size, monkey1_pos, monkey2_pos, box_pos, banana_pos, obstacles):
+        self.grid_size = grid_size
+        self.monkey1_pos = monkey1_pos
+        self.monkey2_pos = monkey2_pos
+        self.box_pos = box_pos
+        self.banana_pos = banana_pos
+        self.obstacles = obstacles
+        self.banana_grabbed = False
 
-MOVE_LEFT = -1
-MOVE_RIGHT = 1
-CLIMB = "climb"
+    def is_valid(self, position):
+        x, y = position
+        if 0 <= x < self.grid_size[0] and 0 <= y < self.grid_size[1]:
+            if position not in self.obstacles:
+                return True
+        return False
 
-class Environment:
-    def _init_(self):
-        self.m1_position = MONKEY1_START
-        self.m2_position = MONKEY2_START
-        self.banana_position = BANANA_POSITION
+    def get_neighbors(self, position):
+        x, y = position
+        moves = [(x+1, y), (x-1, y), (x, y+1), (x, y-1)]
+        return [move for move in moves if self.is_valid(move)]
 
-    def is_beneath_banana(self, monkey_position):
-        return monkey_position == self.banana_position - 1
+    def heuristic(self, position, target):
+        return abs(position[0] - target[0]) + abs(position[1] - target[1])
 
-    def apply_action(self, state, monkey, action):
-        m1_position, m2_position = state
-
-        current_position = m1_position if monkey == 1 else m2_position
-
-        if action == MOVE_LEFT:
-            new_position = max(0, current_position - 1)  
-        elif action == MOVE_RIGHT:
-            new_position = min(ROOM_SIZE - 1, current_position + 1)
-        elif action == CLIMB:
-            if self.is_beneath_banana(current_position):
-                new_position = self.banana_position 
-            else:
-                new_position = current_position 
-        else:
-            new_position = current_position
-
-        if monkey == 1:
-            return (new_position, m2_position)
-        else:
-            return (m1_position, new_position)
-
-    def is_goal_state(self, state):
-        return state[0] == self.banana_position or state[1] == self.banana_position
-
-    def get_state(self):
-        return (self.m1_position, self.m2_position)
-
-class MonkeyBananaProblem:
-    def _init_(self):
-        self.environment = Environment()
-
-    def bfs(self):
-        start_state = self.environment.get_state()
-        queue = deque([(start_state, [])])  
-        visited = set()
-
-        while queue:
-            state, actions = queue.popleft()
-
-            if state in visited:
-                continue
-            visited.add(state)
+    def a_star_search(self, start, goal):
+        pq = []
+        heapq.heappush(pq, (0, start))
+        costs = {start: 0}
+        came_from = {start: None}
+        
+        while pq:
+            current_cost, current = heapq.heappop(pq)
+            if current == goal:
+                path = []
+                while current:
+                    path.append(current)
+                    current = came_from[current]
+                return path[::-1]
             
-            if self.environment.is_goal_state(state):
-                return actions
+            for neighbor in self.get_neighbors(current):
+                new_cost = costs[current] + 1
+                if neighbor not in costs or new_cost < costs[neighbor]:
+                    costs[neighbor] = new_cost
+                    priority = new_cost + self.heuristic(neighbor, goal)
+                    heapq.heappush(pq, (priority, neighbor))
+                    came_from[neighbor] = current
+        return []
 
-            for monkey in [1, 2]:  
-                for action in [MOVE_LEFT, MOVE_RIGHT, CLIMB]:
-                    new_state = self.environment.apply_action(state, monkey, action)
-                    if new_state not in visited:
-                        queue.append((new_state, actions + [(monkey, action)]))
-        return None
+    def simulate(self):
+        if self.banana_grabbed:
+            print("Banana already grabbed!")
+            return
 
-# Create the problem instance
-problem = MonkeyBananaProblem()
+        path1 = self.a_star_search(self.monkey1_pos, self.box_pos)
+        path2 = self.a_star_search(self.monkey2_pos, self.box_pos)
 
-# Solve using BFS
-solution = problem.bfs()
-if solution:
-    print("🍌 Solution found:")
-    for step in solution:
-        action_desc = f"moves {'left' if step[1] == MOVE_LEFT else 'right' if step[1] == MOVE_RIGHT else 'climbs'}"
-        print(f"Monkey {step[0]} {action_desc}")
-else:
-    print("No solution found 😕")
+        if path1 and path2:
+            print("Monkey1 Path:", path1)
+            print("Monkey2 Path:", path2)
+
+        # Decide who gets the box first (shortest path wins or tie-breaker)
+        if len(path1) < len(path2):
+            self.monkey1_pos = self.box_pos
+            print("Monkey1 moves to the box.")
+        else:
+            self.monkey2_pos = self.box_pos
+            print("Monkey2 moves to the box.")
+
+        # Push box under banana
+        box_to_banana = self.a_star_search(self.box_pos, self.banana_pos)
+        if box_to_banana:
+            self.box_pos = self.banana_pos
+            print("Box pushed under the banana.")
+
+        # Climb and grab banana
+        self.banana_grabbed = True
+        print("Banana grabbed! Goal achieved!")
+
+# Define environment
+grid_size = (5, 5)
+monkey1_pos = (0, 0)
+monkey2_pos = (4, 4)
+box_pos = (2, 2)
+banana_pos = (3, 3)
+obstacles = [(1, 1), (1, 2), (2, 1)]
+
+# Simulate the game
+game = MonkeyBanana(grid_size, monkey1_pos, monkey2_pos, box_pos, banana_pos, obstacles)
+game.simulate()
